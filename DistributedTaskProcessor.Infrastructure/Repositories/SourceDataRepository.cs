@@ -26,11 +26,26 @@ public class SourceDataRepository : ISourceDataRepository
     {
         try
         {
-            var data = await _context.SourceMarketData
+            // Optimized: Use ID-based filtering instead of Skip/Take for better performance
+            // First, get the IDs at the boundaries
+            var allIds = await _context.SourceMarketData
                 .Where(s => s.Symbol == symbol && s.Fund == fund && s.RunDate == runDate)
                 .OrderBy(s => s.Id)
-                .Skip((int)startRow)
-                .Take((int)(endRow - startRow + 1))
+                .Select(s => s.Id)
+                .ToListAsync(cancellationToken);
+
+            if (allIds.Count == 0)
+                return new List<SourceMarketData>();
+
+            // Get the start and end IDs based on row offsets
+            var minId = allIds[(int)Math.Min(startRow, allIds.Count - 1)];
+            var maxId = allIds[(int)Math.Min(endRow, allIds.Count - 1)];
+
+            // Now fetch the actual data using ID-based filtering (much faster for large datasets)
+            var data = await _context.SourceMarketData
+                .Where(s => s.Symbol == symbol && s.Fund == fund && s.RunDate == runDate
+                            && s.Id >= minId && s.Id <= maxId)
+                .OrderBy(s => s.Id)
                 .AsNoTracking()
                 .ToListAsync(cancellationToken);
 

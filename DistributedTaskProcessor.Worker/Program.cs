@@ -3,6 +3,7 @@ using DistributedTaskProcessor.Infrastructure.Data;
 using DistributedTaskProcessor.Infrastructure.Repositories;
 using DistributedTaskProcessor.Infrastructure.Kafka;
 using DistributedTaskProcessor.Shared.Configuration;
+using DistributedTaskProcessor.Shared.Monitoring;
 using DistributedTaskProcessor.Worker.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -26,6 +27,10 @@ builder.Services.AddDbContext<TaskDbContext>(options =>
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<ISourceDataRepository, SourceDataRepository>();
 builder.Services.AddSingleton<IKafkaProducerService, KafkaProducerService>();
+
+// Register MetricsService as singleton
+var metricsService = new MetricsService();
+builder.Services.AddSingleton<IMetricsService>(metricsService);
 
 // Add topic manager for verification (optional)
 builder.Services.AddSingleton<IKafkaTopicManager, KafkaTopicManager>();

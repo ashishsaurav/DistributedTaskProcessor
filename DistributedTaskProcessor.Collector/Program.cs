@@ -2,6 +2,7 @@
 using DistributedTaskProcessor.Infrastructure.Data;
 using DistributedTaskProcessor.Infrastructure.Repositories;
 using DistributedTaskProcessor.Shared.Configuration;
+using DistributedTaskProcessor.Shared.Monitoring;
 using DistributedTaskProcessor.Collector.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -25,6 +26,10 @@ builder.Services.AddDbContext<TaskDbContext>(options =>
 // Repositories
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<IResultRepository, ResultRepository>();
+
+// Register MetricsService as singleton
+var metricsService = new global::DistributedTaskProcessor.Shared.Monitoring.MetricsService();
+builder.Services.AddSingleton<IMetricsService>(metricsService);
 
 // Background Service
 builder.Services.AddHostedService<KafkaResultCollectorService>();

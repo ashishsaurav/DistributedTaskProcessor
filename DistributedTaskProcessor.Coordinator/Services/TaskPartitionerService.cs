@@ -62,6 +62,7 @@ public class TaskPartitionerService : BackgroundService
             }
             catch (OperationCanceledException)
             {
+                _logger.LogInformation("Task Partitioner Service stopping...");
                 break;
             }
             catch (Exception ex)
@@ -70,6 +71,19 @@ public class TaskPartitionerService : BackgroundService
                 await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
             }
         }
+
+        // Graceful shutdown: Flush any pending messages
+        try
+        {
+            await _kafkaProducer.FlushAsync(stoppingToken);
+            _logger.LogInformation("Task Partitioner flushed all pending messages");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error flushing messages during shutdown");
+        }
+
+        _logger.LogInformation("Task Partitioner Service stopped");
     }
 
     private async Task PartitionAndPublishTasksAsync(CancellationToken cancellationToken)
@@ -87,7 +101,7 @@ public class TaskPartitionerService : BackgroundService
 
         if (rowCounts.Count == 0)
         {
-            _logger.LogWarning("No source data found for RunDate: {RunDate}", runDate);
+            _logger.LogWarning("No source data found for RunDate: {RunDate}. No tasks created.", runDate);
             return;
         }
 
@@ -130,6 +144,13 @@ public class TaskPartitionerService : BackgroundService
                 };
                 tasks.Add(task);
             }
+        }
+
+        // Validation: Ensure we have tasks to process
+        if (tasks.Count == 0)
+        {
+            _logger.LogWarning("No tasks generated from source data for RunDate: {RunDate}", runDate);
+            return;
         }
 
         // Save to database

@@ -47,6 +47,7 @@ public class FailureDetectionService : BackgroundService
             }
             catch (OperationCanceledException)
             {
+                _logger.LogInformation("Failure Detection Service stopping...");
                 break;
             }
             catch (Exception ex)
@@ -55,6 +56,19 @@ public class FailureDetectionService : BackgroundService
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
         }
+
+        // Graceful shutdown: Flush pending messages
+        try
+        {
+            await _kafkaProducer.FlushAsync(stoppingToken);
+            _logger.LogInformation("Failure Detection Service flushed all pending messages");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error flushing messages during shutdown");
+        }
+
+        _logger.LogInformation("Failure Detection Service stopped");
     }
 
     private async Task DetectAndRecoverStalledTasksAsync(CancellationToken cancellationToken)
@@ -110,13 +124,23 @@ public class FailureDetectionService : BackgroundService
                 }
                 else
                 {
+                    // Calculate exponential backoff delay: 2^(retryCount-1) seconds, max 60 seconds
+                    var backoffSeconds = Math.Min(Math.Pow(2, task.RetryCount), 60);
+                    var backoffDelay = TimeSpan.FromSeconds(backoffSeconds);
+
+                    _logger.LogInformation("Applying exponential backoff ({BackoffSeconds}s) for stalled task {TaskId}, retry attempt {RetryCount}",
+                        backoffSeconds, task.TaskId, task.RetryCount + 1);
+
                     // Reassign task
                     await repository.UpdateTaskStatusAsync(
                         task.TaskId,
                         TaskStatus.Pending,
                         null,
-                        $"Reassigned after stall detection (retry {task.RetryCount + 1})",
+                        $"Reassigned after stall detection with exponential backoff {backoffDelay.TotalSeconds}s (retry {task.RetryCount + 1})",
                         cancellationToken);
+
+                    // Wait before republishing to apply backoff
+                    await Task.Delay(backoffDelay, cancellationToken);
 
                     var retryMessage = new TaskMessage
                     {

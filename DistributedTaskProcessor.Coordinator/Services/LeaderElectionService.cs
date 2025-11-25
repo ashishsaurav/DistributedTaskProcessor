@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using DistributedTaskProcessor.Infrastructure.Data;
 using DistributedTaskProcessor.Shared.Models;
+using DistributedTaskProcessor.Shared.Configuration;
 
 namespace DistributedTaskProcessor.Coordinator.Services;
 
@@ -11,16 +12,19 @@ public class LeaderElectionService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<LeaderElectionService> _logger;
+    private readonly SystemSettings _systemSettings;
     private readonly string _coordinatorId;
     private bool _isLeader;
     private readonly SemaphoreSlim _leaderLock = new(1, 1);
 
     public LeaderElectionService(
         IServiceProvider serviceProvider,
-        ILogger<LeaderElectionService> logger)
+        ILogger<LeaderElectionService> logger,
+        SystemSettings systemSettings)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _systemSettings = systemSettings;
         _coordinatorId = $"{Environment.MachineName}_{Guid.NewGuid().ToString()[..8]}";
     }
 
@@ -53,7 +57,16 @@ public class LeaderElectionService : BackgroundService
             }
         }
 
-        await StepDownAsync();
+        // Graceful shutdown: Step down as leader
+        try
+        {
+            await StepDownAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during graceful shutdown");
+        }
+
         _logger.LogInformation("Leader Election Service stopped");
     }
 
@@ -62,7 +75,7 @@ public class LeaderElectionService : BackgroundService
         await _leaderLock.WaitAsync(cancellationToken);
         try
         {
-            var cutoffTime = DateTime.UtcNow.AddSeconds(-30);
+            var cutoffTime = DateTime.UtcNow.AddSeconds(-_systemSettings.LeaderTimeoutSeconds);
 
             // Find active leader
             var currentLeader = await dbContext.CoordinatorStates

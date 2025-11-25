@@ -1,10 +1,12 @@
 ﻿using Confluent.Kafka;
 using System.Text.Json;
+using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using DistributedTaskProcessor.Shared.Models;
 using DistributedTaskProcessor.Shared.Configuration;
+using DistributedTaskProcessor.Shared.Monitoring;
 using DistributedTaskProcessor.Infrastructure.Repositories;
 using DistributedTaskProcessor.Infrastructure.Kafka;
 using TaskStatus = DistributedTaskProcessor.Shared.Models.TaskStatus;
@@ -16,6 +18,7 @@ public class KafkaTaskConsumerService : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<KafkaTaskConsumerService> _logger;
     private readonly IKafkaProducerService _kafkaProducer;
+    private readonly IMetricsService _metricsService;
     private readonly KafkaSettings _kafkaSettings;
     private readonly string _workerId;
     private IConsumer<string, string>? _consumer;
@@ -24,11 +27,13 @@ public class KafkaTaskConsumerService : BackgroundService
         IServiceProvider serviceProvider,
         ILogger<KafkaTaskConsumerService> logger,
         IKafkaProducerService kafkaProducer,
+        IMetricsService metricsService,
         KafkaSettings kafkaSettings)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
         _kafkaProducer = kafkaProducer;
+        _metricsService = metricsService;
         _kafkaSettings = kafkaSettings;
         _workerId = $"{Environment.MachineName}_Worker_{Guid.NewGuid().ToString()[..8]}";
     }
@@ -59,6 +64,8 @@ public class KafkaTaskConsumerService : BackgroundService
         _logger.LogInformation("Worker {WorkerId} started consuming from topic: {Topic}",
             _workerId, _kafkaSettings.TaskTopic);
 
+        _metricsService.RecordWorkerStartup(_workerId);
+
         try
         {
             while (!stoppingToken.IsCancellationRequested)
@@ -79,18 +86,32 @@ public class KafkaTaskConsumerService : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("Worker {WorkerId} shutting down", _workerId);
+            _logger.LogInformation("Worker {WorkerId} shutting down gracefully...", _workerId);
         }
         finally
         {
+            // Graceful shutdown: Allow in-flight tasks to complete
+            try
+            {
+                await _kafkaProducer.FlushAsync(CancellationToken.None);
+                _logger.LogInformation("Worker {WorkerId} flushed all pending messages", _workerId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error flushing messages during worker shutdown");
+            }
+
             _consumer.Close();
             _consumer.Dispose();
+            _metricsService.RecordWorkerShutdown(_workerId);
+            _logger.LogInformation("Worker {WorkerId} stopped", _workerId);
         }
     }
 
     private async Task ProcessTaskAsync(ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken)
     {
         TaskMessage? taskMessage = null;
+        var stopwatch = Stopwatch.StartNew();
 
         try
         {
@@ -126,12 +147,7 @@ public class KafkaTaskConsumerService : BackgroundService
                 return;
             }
 
-            _logger.LogInformation("Worker {WorkerId} processing task {TaskId} ({Symbol}/{Fund}, rows {Start}-{End})",
-                _workerId, taskMessage.TaskId, taskMessage.Symbol, taskMessage.Fund,
-                taskMessage.StartRow, taskMessage.EndRow);
-
-            taskMessage = JsonSerializer.Deserialize<TaskMessage>(consumeResult.Message.Value);
-            if (taskMessage == null) return;
+            _metricsService.RecordTaskStarted(taskMessage.TaskId, _workerId);
 
             _logger.LogInformation("Worker {WorkerId} processing task {TaskId} ({Symbol}/{Fund}, rows {Start}-{End})",
                 _workerId, taskMessage.TaskId, taskMessage.Symbol, taskMessage.Fund,
@@ -186,15 +202,21 @@ public class KafkaTaskConsumerService : BackgroundService
             // Commit offset only after successful processing
             _consumer!.Commit(consumeResult);
 
+            stopwatch.Stop();
+            _metricsService.RecordTaskCompleted(taskMessage.TaskId, _workerId, stopwatch.Elapsed, results.Count);
+
             _logger.LogInformation("✓ Worker {WorkerId} completed task {TaskId}: {Rows} rows processed",
                 _workerId, taskMessage.TaskId, results.Count);
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
             _logger.LogError(ex, "Worker {WorkerId} failed task {TaskId}", _workerId, taskMessage?.TaskId);
 
             if (taskMessage != null)
             {
+                _metricsService.RecordTaskFailed(taskMessage.TaskId, _workerId, ex.GetType().Name);
+
                 using var scope = _serviceProvider.CreateScope();
                 var taskRepository = scope.ServiceProvider.GetRequiredService<ITaskRepository>();
 

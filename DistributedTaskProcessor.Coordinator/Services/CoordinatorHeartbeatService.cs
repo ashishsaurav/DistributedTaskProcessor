@@ -49,6 +49,7 @@ public class CoordinatorHeartbeatService : BackgroundService
             }
             catch (OperationCanceledException)
             {
+                _logger.LogInformation("Coordinator Heartbeat Service stopping...");
                 break;
             }
             catch (Exception ex)
@@ -57,5 +58,7 @@ public class CoordinatorHeartbeatService : BackgroundService
                 await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
             }
         }
+
+        _logger.LogInformation("Coordinator Heartbeat Service stopped");
     }
 }

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using DistributedTaskProcessor.Shared.Models;
 using DistributedTaskProcessor.Shared.Configuration;
+using DistributedTaskProcessor.Shared.Monitoring;
 using DistributedTaskProcessor.Infrastructure.Repositories;
 using TaskStatus = DistributedTaskProcessor.Shared.Models.TaskStatus;
 
@@ -14,6 +15,7 @@ public class KafkaResultCollectorService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<KafkaResultCollectorService> _logger;
+    private readonly IMetricsService _metricsService;
     private readonly KafkaSettings _kafkaSettings;
     private readonly string _collectorId;
     private IConsumer<string, string>? _consumer;
@@ -21,10 +23,12 @@ public class KafkaResultCollectorService : BackgroundService
     public KafkaResultCollectorService(
         IServiceProvider serviceProvider,
         ILogger<KafkaResultCollectorService> logger,
+        IMetricsService metricsService,
         KafkaSettings kafkaSettings)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _metricsService = metricsService;
         _kafkaSettings = kafkaSettings;
         _collectorId = $"{Environment.MachineName}_Collector_{Guid.NewGuid().ToString()[..8]}";
     }
@@ -55,6 +59,8 @@ public class KafkaResultCollectorService : BackgroundService
         _logger.LogInformation("Collector {CollectorId} started consuming from topic: {Topic}",
             _collectorId, _kafkaSettings.ResultTopic);
 
+        _metricsService.RecordWorkerStartup(_collectorId);
+
         try
         {
             while (!stoppingToken.IsCancellationRequested)
@@ -75,12 +81,14 @@ public class KafkaResultCollectorService : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("Collector {CollectorId} shutting down", _collectorId);
+            _logger.LogInformation("Collector {CollectorId} shutting down gracefully...", _collectorId);
         }
         finally
         {
             _consumer.Close();
             _consumer.Dispose();
+            _metricsService.RecordWorkerShutdown(_collectorId);
+            _logger.LogInformation("Collector {CollectorId} stopped", _collectorId);
         }
     }
 

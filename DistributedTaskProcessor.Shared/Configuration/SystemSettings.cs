@@ -6,4 +6,5 @@ public class SystemSettings
     public int StalledTaskTimeoutMinutes { get; set; } = 5;
     public int WorkerHeartbeatIntervalSeconds { get; set; } = 30;
     public int CoordinatorHeartbeatIntervalSeconds { get; set; } = 10;
+    public int LeaderTimeoutSeconds { get; set; } = 30;
 }

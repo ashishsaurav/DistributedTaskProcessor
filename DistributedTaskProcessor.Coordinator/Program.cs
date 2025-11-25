@@ -42,6 +42,17 @@ builder.Services.AddHostedService<TaskPartitionerService>();
 builder.Services.AddHostedService<FailureDetectionService>();
 builder.Services.AddHostedService<CoordinatorHeartbeatService>();
 
+// CORS for Dashboard
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", builder =>
+    {
+        builder.AllowAnyOrigin()
+               .AllowAnyMethod()
+               .AllowAnyHeader();
+    });
+});
+
 // API
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -88,6 +99,26 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Enable CORS
+app.UseCors("AllowAll");
+
+// Static files for Dashboard
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
+// Fallback to index.html for SPA
+app.Use(async (context, next) =>
+{
+    await next();
+    if (context.Response.StatusCode == 404 &&
+        !Path.HasExtension(context.Request.Path.Value) &&
+        !context.Request.Path.Value.StartsWith("/api"))
+    {
+        context.Request.Path = "/index.html";
+        await next();
+    }
+});
 
 app.MapControllers();
 app.MapHealthChecks("/health");

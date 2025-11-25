@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed Task Processor - Live Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <div class="header-content">
+                <h1>🚀 Distributed Task Processor - Live Dashboard</h1>
+                <div class="header-info">
+                    <span class="status-indicator" id="systemStatus">●</span>
+                    <span id="systemHealthText">Loading...</span>
+                    <span class="timestamp" id="currentTime"></span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Grid -->
+        <div class="dashboard-grid">
+            <!-- Left Column -->
+            <div class="dashboard-column left-column">
+                <!-- System Health Summary -->
+                <section class="card system-health-card">
+                    <h2>System Health</h2>
+                    <div class="health-grid">
+                        <div class="health-item">
+                            <span class="label">Active Workers</span>
+                            <span class="value" id="activeWorkers">0</span>
+                        </div>
+                        <div class="health-item">
+                            <span class="label">Total Workers</span>
+                            <span class="value" id="totalWorkers">0</span>
+                        </div>
+                        <div class="health-item">
+                            <span class="label">Task Throughput</span>
+                            <span class="value" id="taskThroughput">0 tasks/s</span>
+                        </div>
+                        <div class="health-item">
+                            <span class="label">Data Throughput</span>
+                            <span class="value" id="dataThroughput">0 rows/s</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Task Statistics -->
+                <section class="card task-stats-card">
+                    <h2>Task Statistics</h2>
+                    <div class="stats-container">
+                        <div class="stat-item pending">
+                            <span class="stat-label">Pending</span>
+                            <span class="stat-count" id="pendingCount">0</span>
+                        </div>
+                        <div class="stat-item in-progress">
+                            <span class="stat-label">In Progress</span>
+                            <span class="stat-count" id="inProgressCount">0</span>
+                        </div>
+                        <div class="stat-item completed">
+                            <span class="stat-label">Completed</span>
+                            <span class="stat-count" id="completedCount">0</span>
+                        </div>
+                        <div class="stat-item failed">
+                            <span class="stat-label">Failed</span>
+                            <span class="stat-count" id="failedCount">0</span>
+                        </div>
+                        <div class="stat-item dead-letter">
+                            <span class="stat-label">Dead Letter</span>
+                            <span class="stat-count" id="deadLetterCount">0</span>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="successRateBar" class="success-rate-bar"></div>
+                        <span id="successRateText" class="progress-text">Success Rate: 0%</span>
+                    </div>
+                </section>
+
+                <!-- Real-time Chart -->
+                <section class="card chart-card">
+                    <h2>Task Processing Timeline</h2>
+                    <canvas id="throughputChart"></canvas>
+                </section>
+            </div>
+
+            <!-- Center Column -->
+            <div class="dashboard-column center-column">
+                <!-- Workers List -->
+                <section class="card workers-card">
+                    <div class="card-header">
+                        <h2>👷 Active Workers</h2>
+                        <span class="worker-count-badge" id="workerCountBadge">0</span>
+                    </div>
+                    <div class="workers-list" id="workersList">
+                        <div class="no-data">No active workers</div>
+                    </div>
+                </section>
+
+                <!-- Live Events -->
+                <section class="card events-card">
+                    <div class="card-header">
+                        <h2>📊 Live Events</h2>
+                        <button class="btn-clear" onclick="clearLiveEvents()">Clear</button>
+                    </div>
+                    <div class="events-list" id="eventsList">
+                        <div class="no-data">Waiting for events...</div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Right Column -->
+            <div class="dashboard-column right-column">
+                <!-- Performance Metrics -->
+                <section class="card performance-card">
+                    <h2>Performance Metrics</h2>
+                    <div class="metrics-list">
+                        <div class="metric-row">
+                            <span class="metric-label">Avg Task Duration</span>
+                            <span class="metric-value" id="avgTaskDuration">0 ms</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Error Rate</span>
+                            <span class="metric-value" id="errorRate">0%</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Total Rows Processed</span>
+                            <span class="metric-value" id="totalRowsProcessed">0</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Success Rate</span>
+                            <span class="metric-value success" id="successRate">0%</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Alerts -->
+                <section class="card alerts-card">
+                    <div class="card-header">
+                        <h2>⚠️ Alerts</h2>
+                        <span class="alert-count-badge" id="alertCountBadge">0</span>
+                    </div>
+                    <div class="alerts-list" id="alertsList">
+                        <div class="no-data">No alerts</div>
+                    </div>
+                </section>
+
+                <!-- Task Distribution -->
+                <section class="card distribution-card">
+                    <h2>Workload Distribution</h2>
+                    <div class="distribution-info">
+                        <div class="dist-item">
+                            <span class="label">Max Per Worker</span>
+                            <span class="value" id="maxTasksPerWorker">0</span>
+                        </div>
+                        <div class="dist-item">
+                            <span class="label">Min Per Worker</span>
+                            <span class="value" id="minTasksPerWorker">0</span>
+                        </div>
+                        <div class="dist-item">
+                            <span class="label">Avg Per Worker</span>
+                            <span class="value" id="avgTasksPerWorker">0</span>
+                        </div>
+                        <div class="dist-item">
+                            <span class="label" id="balanceLabel">Balanced</span>
+                            <span class="value" id="balanceStatus">✓</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Detailed Tasks & Workers Section -->
+        <section class="card detailed-data-card">
+            <div class="card-header">
+                <h2>📋 Detailed Task & Worker Analysis</h2>
+                <div class="tab-buttons">
+                    <button class="tab-btn active" onclick="switchTab('tasks')">Tasks Overview</button>
+                    <button class="tab-btn" onclick="switchTab('worker-tasks')">Worker Tasks</button>
+                </div>
+            </div>
+            
+            <!-- Tasks Tab -->
+            <div id="tasks-tab" class="tab-content active">
+                <div class="table-container">
+                    <table class="detail-table">
+                        <thead>
+                            <tr>
+                                <th>Task ID</th>
+                                <th>Symbol</th>
+                                <th>Fund</th>
+                                <th>Rows (Start-End)</th>
+                                <th>Rows Processed</th>
+                                <th>Worker</th>
+                                <th>Status</th>
+                                <th>Created At</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tasksTableBody">
+                            <tr><td colspan="8" class="no-data">Loading tasks...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Worker Tasks Tab -->
+            <div id="worker-tasks-tab" class="tab-content">
+                <div class="worker-tasks-container" id="workerTasksContainer">
+                    <div class="no-data">Loading worker tasks...</div>
+                </div>
+            </div>
+        </section>
+
+        </div>
+
+        <!-- Worker Details Modal -->
+        <div id="workerModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="workerModalTitle">Worker Details</h2>
+                    <button class="modal-close" onclick="closeWorkerModal()">&times;</button>
+                </div>
+                <div class="modal-body" id="workerModalBody">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>

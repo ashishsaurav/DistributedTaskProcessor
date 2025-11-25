@@ -2,11 +2,11 @@
   "profiles": {
     "DistributedTaskProcessor.Coordinator": {
       "commandName": "Project",
-      "launchBrowser": true,
+      "launchBrowser": false,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "applicationUrl": "https://localhost:52158;http://localhost:52159"
+      "applicationUrl": "http://localhost:5000"
     }
   }
 }

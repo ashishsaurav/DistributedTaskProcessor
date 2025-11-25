@@ -68,6 +68,7 @@ public class WorkerHeartbeatService : BackgroundService
             }
             catch (OperationCanceledException)
             {
+                _logger.LogInformation("Worker Heartbeat Service stopping for {WorkerId}...", _workerId);
                 break;
             }
             catch (Exception ex)
@@ -75,6 +76,28 @@ public class WorkerHeartbeatService : BackgroundService
                 _logger.LogError(ex, "Error sending worker heartbeat");
                 await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
             }
+        }
+
+        // Graceful shutdown: Mark worker as inactive
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<TaskDbContext>();
+
+            var heartbeat = await dbContext.WorkerHeartbeats
+                .FirstOrDefaultAsync(w => w.WorkerId == _workerId, CancellationToken.None);
+
+            if (heartbeat != null)
+            {
+                heartbeat.Status = "Inactive";
+                heartbeat.LastHeartbeat = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync(CancellationToken.None);
+                _logger.LogInformation("Worker {WorkerId} marked as inactive", _workerId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error marking worker as inactive during shutdown");
         }
 
         _logger.LogInformation("Worker Heartbeat Service stopped for {WorkerId}", _workerId);
