@@ -4,6 +4,7 @@ using DistributedTaskProcessor.Infrastructure.Data;
 using DistributedTaskProcessor.Infrastructure.Repositories;
 using DistributedTaskProcessor.Infrastructure.Kafka;
 using DistributedTaskProcessor.Shared.Configuration;
+using DistributedTaskProcessor.Shared.Models;
 using DistributedTaskProcessor.Coordinator.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,9 +12,11 @@ var builder = WebApplication.CreateBuilder(args);
 // Configuration
 var kafkaSettings = builder.Configuration.GetSection("Kafka").Get<KafkaSettings>() ?? new KafkaSettings();
 var systemSettings = builder.Configuration.GetSection("System").Get<SystemSettings>() ?? new SystemSettings();
+var multiTenantSettings = builder.Configuration.GetSection("MultiTenant").Get<MultiTenantSettings>() ?? new MultiTenantSettings();
 
 builder.Services.AddSingleton(kafkaSettings);
 builder.Services.AddSingleton(systemSettings);
+builder.Services.AddSingleton(multiTenantSettings);
 
 // Database
 builder.Services.AddDbContext<TaskDbContext>(options =>
@@ -34,13 +37,19 @@ builder.Services.AddSingleton<IKafkaProducerService, KafkaProducerService>();
 // Kafka Topic Manager
 builder.Services.AddSingleton<IKafkaTopicManager, KafkaTopicManager>();
 
+// Multi-Tenant Services
+builder.Services.AddScoped<DataFetcherService>();
+builder.Services.AddScoped<AdvancedTaskPartitionerService>();
+builder.Services.AddSingleton<FaultDetectionService>();
+
 // Background Services
 builder.Services.AddSingleton<LeaderElectionService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<LeaderElectionService>());
 
-builder.Services.AddHostedService<TaskPartitionerService>();
-builder.Services.AddHostedService<FailureDetectionService>();
 builder.Services.AddHostedService<CoordinatorHeartbeatService>();
+builder.Services.AddHostedService<FaultDetectionBackgroundService>();
+builder.Services.AddHostedService<DataFetcherBackgroundService>();
+builder.Services.AddHostedService<TaskPartitionerBackgroundService>();
 
 // CORS for Dashboard
 builder.Services.AddCors(options =>
@@ -57,6 +66,9 @@ builder.Services.AddCors(options =>
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// SignalR for Real-Time Updates
+builder.Services.AddSignalR();
 
 // Health Checks
 builder.Services.AddHealthChecks()
@@ -84,6 +96,38 @@ using (var scope = app.Services.CreateScope())
         var topicManager = scope.ServiceProvider.GetRequiredService<IKafkaTopicManager>();
         await topicManager.CreateTopicsAsync();
         logger.LogInformation("✓ Kafka topics ready");
+
+        // 3. Create sample data for testing
+        var dbContext = scope.ServiceProvider.GetRequiredService<TaskDbContext>();
+        var existingTasks = await dbContext.Tasks.AnyAsync();
+
+        if (!existingTasks)
+        {
+            logger.LogInformation("Creating sample test data...");
+            var sampleTasks = new List<TaskEntity>();
+
+            for (int i = 0; i < 50; i++)
+            {
+                sampleTasks.Add(new TaskEntity
+                {
+                    TaskId = Guid.NewGuid(),
+                    Symbol = i % 5 == 0 ? "AAPL" : i % 5 == 1 ? "GOOGL" : i % 5 == 2 ? "MSFT" : i % 5 == 3 ? "AMZN" : "TSLA",
+                    Fund = i % 3 == 0 ? "Fund-A" : i % 3 == 1 ? "Fund-B" : "Fund-C",
+                    RunDate = DateTime.UtcNow.Date,
+                    StartRow = i * 1000,
+                    EndRow = (i + 1) * 1000 - 1,
+                    Status = TaskStatus.Pending,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    TenantId = Guid.Empty,
+                    RetryCount = 0
+                });
+            }
+
+            await dbContext.Tasks.AddRangeAsync(sampleTasks);
+            await dbContext.SaveChangesAsync();
+            logger.LogInformation("✓ Created {TaskCount} sample tasks", sampleTasks.Count);
+        }
 
         logger.LogInformation("✓ Infrastructure initialization complete");
     }

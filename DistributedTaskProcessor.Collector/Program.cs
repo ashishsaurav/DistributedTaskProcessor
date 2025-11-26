@@ -9,8 +9,10 @@ var builder = Host.CreateApplicationBuilder(args);
 
 // Configuration
 var kafkaSettings = builder.Configuration.GetSection("Kafka").Get<KafkaSettings>() ?? new KafkaSettings();
+var multiTenantSettings = builder.Configuration.GetSection("MultiTenant").Get<MultiTenantSettings>() ?? new MultiTenantSettings();
 
 builder.Services.AddSingleton(kafkaSettings);
+builder.Services.AddSingleton(multiTenantSettings);
 
 // Database
 builder.Services.AddDbContext<TaskDbContext>(options =>
@@ -31,8 +33,12 @@ builder.Services.AddScoped<IResultRepository, ResultRepository>();
 var metricsService = new global::DistributedTaskProcessor.Shared.Monitoring.MetricsService();
 builder.Services.AddSingleton<IMetricsService>(metricsService);
 
-// Background Service
+// Multi-Tenant Services
+builder.Services.AddScoped<AdvancedResultCollectorService>();
+
+// Background Services
 builder.Services.AddHostedService<KafkaResultCollectorService>();
+builder.Services.AddHostedService<AdvancedResultCollectorBackgroundService>();
 
 var host = builder.Build();
 host.Run();

@@ -101,6 +101,38 @@ body {
     font-size: 0.9rem;
 }
 
+/* SignalR Connection Status */
+.connection-status {
+    display: inline-block;
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: var(--transition);
+}
+
+.connection-status.connected {
+    background: rgba(34, 197, 94, 0.3);
+    color: #22c55e;
+    border: 1px solid #22c55e;
+}
+
+.connection-status.connecting {
+    background: rgba(234, 179, 8, 0.3);
+    color: #eab308;
+    border: 1px solid #eab308;
+    animation: pulse-warning 1s infinite;
+}
+
+.connection-status.disconnected {
+    background: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    border: 1px solid #ef4444;
+}
+}
+
 /* Dashboard Container */
 .dashboard-container {
     max-width: 1600px;

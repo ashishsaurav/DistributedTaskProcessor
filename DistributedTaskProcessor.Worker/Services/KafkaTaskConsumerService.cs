@@ -43,7 +43,7 @@ public class KafkaTaskConsumerService : BackgroundService
         var config = new ConsumerConfig
         {
             BootstrapServers = _kafkaSettings.BootstrapServers,
-            GroupId = _kafkaSettings.WorkerGroupId,
+            GroupId = $"{_kafkaSettings.WorkerGroupId}-{_workerId}",
             EnableAutoCommit = false,
             AutoOffsetReset = AutoOffsetReset.Earliest,
             SessionTimeoutMs = _kafkaSettings.SessionTimeoutMs,
@@ -72,11 +72,15 @@ public class KafkaTaskConsumerService : BackgroundService
             {
                 try
                 {
-                    var consumeResult = _consumer.Consume(stoppingToken);
+                    var consumeResult = _consumer.Consume(TimeSpan.FromSeconds(5));
                     if (consumeResult?.Message != null)
                     {
                         await ProcessTaskAsync(consumeResult, stoppingToken);
                     }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Timeout reached, loop again
                 }
                 catch (ConsumeException ex)
                 {

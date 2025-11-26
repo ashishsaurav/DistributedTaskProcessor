@@ -13,6 +13,9 @@ public class TaskEntity
     public Guid TaskId { get; set; }
 
     [Required]
+    public Guid TenantId { get; set; }
+
+    [Required]
     [MaxLength(50)]
     public string Symbol { get; set; } = string.Empty;
 

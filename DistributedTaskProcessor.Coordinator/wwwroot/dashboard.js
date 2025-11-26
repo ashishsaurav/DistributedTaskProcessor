@@ -19,14 +19,35 @@ let dashboardState = {
   },
 };
 
+// Multi-tenant state
+let multiTenantState = {
+  selectedTenantId: null,
+  tenants: [],
+  tenantMetrics: {},
+  sourceDataList: [],
+  taskPartitions: [],
+};
+
 // Initialize Dashboard
 document.addEventListener("DOMContentLoaded", function () {
   console.log("Dashboard initializing...");
   initializeChart();
+  loadTenants();
   startAutoRefresh();
   updateTime();
   setInterval(updateTime, 1000);
 });
+
+// Load tenants on initialization
+async function loadTenants() {
+  try {
+    // TODO: Replace with actual endpoint once implemented
+    multiTenantState.tenants = [];
+    renderTenantSelector();
+  } catch (error) {
+    console.error("Error loading tenants:", error);
+  }
+}
 
 // Update time display
 function updateTime() {
@@ -140,7 +161,7 @@ async function refreshDashboard() {
     // Update detailed views if they're visible
     const tasksTab = document.getElementById("tasksTab");
     const workerTasksTab = document.getElementById("workerTasksTab");
-    
+
     if (tasksTab && tasksTab.classList.contains("active")) {
       refreshDetailedTasks();
     }
@@ -567,7 +588,11 @@ function switchTab(tabName) {
   // Add active class to clicked button
   const buttons = document.querySelectorAll(".tab-btn");
   buttons.forEach((btn) => {
-    if (btn.textContent.toLowerCase().includes(tabName === "tasks" ? "tasks" : "worker")) {
+    if (
+      btn.textContent
+        .toLowerCase()
+        .includes(tabName === "tasks" ? "tasks" : "worker")
+    ) {
       btn.classList.add("active");
     }
   });
@@ -583,7 +608,9 @@ function switchTab(tabName) {
 // Fetch and display detailed tasks
 async function refreshDetailedTasks() {
   try {
-    const response = await axios.get(`${API_BASE_URL}/monitoring/tasks/detailed`);
+    const response = await axios.get(
+      `${API_BASE_URL}/monitoring/tasks/detailed`
+    );
     const tasks = response.data.tasks || [];
     const tableBody = document.getElementById("tasksTableBody");
 
@@ -607,7 +634,9 @@ async function refreshDetailedTasks() {
             <td>${task.startRow} - ${task.endRow}</td>
             <td><strong>${formatNumber(task.rowsProcessed || 0)}</strong></td>
             <td>${task.worker || "—"}</td>
-            <td><span class="status-badge ${statusClass}">${task.status}</span></td>
+            <td><span class="status-badge ${statusClass}">${
+          task.status
+        }</span></td>
             <td>${createdDate}</td>
           </tr>
         `;
@@ -629,7 +658,8 @@ async function refreshWorkerTasks() {
     const container = document.getElementById("workerTasksContainer");
 
     if (workerTasks.length === 0) {
-      container.innerHTML = '<div class="no-data">No workers with tasks found</div>';
+      container.innerHTML =
+        '<div class="no-data">No workers with tasks found</div>';
       return;
     }
 
@@ -687,7 +717,8 @@ async function refreshWorkerTasks() {
   } catch (error) {
     console.error("Error fetching worker tasks:", error);
     const container = document.getElementById("workerTasksContainer");
-    container.innerHTML = '<div class="no-data">Error loading worker tasks</div>';
+    container.innerHTML =
+      '<div class="no-data">Error loading worker tasks</div>';
   }
 }
 
@@ -709,5 +740,71 @@ document.addEventListener("click", function (event) {
     closeWorkerModal();
   }
 });
+
+// Render tenant selector dropdown
+function renderTenantSelector() {
+  const selector = document.getElementById("tenantSelector");
+  if (!selector) return;
+
+  selector.innerHTML = multiTenantState.tenants
+    .map(
+      (tenant) => `
+      <option value="${tenant.tenantId}">${tenant.tenantName}</option>
+    `
+    )
+    .join("");
+
+  // Add change event listener
+  selector.addEventListener("change", function (event) {
+    const tenantId = event.target.value;
+    if (tenantId) {
+      multiTenantState.selectedTenantId = tenantId;
+      loadTenantMetrics(tenantId);
+    }
+  });
+}
+
+// Fetch tenant-specific metrics
+async function loadTenantMetrics(tenantId) {
+  try {
+    // TODO: Replace with actual endpoint once implemented
+    const response = {
+      tenantId: tenantId,
+      pendingRows: 0,
+      processedRows: 0,
+      tasksInProgress: 0,
+      completionPercentage: 0,
+    };
+    multiTenantState.tenantMetrics[tenantId] = response;
+    renderTenantMetrics(response);
+  } catch (error) {
+    console.error("Error loading tenant metrics:", error);
+  }
+}
+
+// Render tenant-specific metrics on dashboard
+function renderTenantMetrics(metrics) {
+  const pendingElement = document.getElementById("tenantPendingRows");
+  const processedElement = document.getElementById("tenantProcessedRows");
+  const inProgressElement = document.getElementById("tenantTasksInProgress");
+  const completionElement = document.getElementById(
+    "tenantCompletionPercentage"
+  );
+
+  if (pendingElement)
+    pendingElement.textContent = formatNumber(metrics.pendingRows);
+  if (processedElement)
+    processedElement.textContent = formatNumber(metrics.processedRows);
+  if (inProgressElement)
+    inProgressElement.textContent = metrics.tasksInProgress;
+  if (completionElement)
+    completionElement.textContent =
+      metrics.completionPercentage.toFixed(1) + "%";
+}
+
+// Format number with thousands separator
+function formatNumber(num) {
+  return num.toLocaleString();
+}
 
 console.log("Dashboard script loaded successfully");

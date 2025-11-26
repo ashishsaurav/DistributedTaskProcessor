@@ -36,7 +36,7 @@ public class MonitoringController : ControllerBase
             var successRate = totalTasks > 0 ? ((double)completedTasks / totalTasks * 100) : 0;
 
             var activeWorkers = await _dbContext.WorkerHeartbeats
-                .Where(w => w.LastHeartbeat > DateTime.UtcNow.AddMinutes(-2))
+                .Where(w => w.LastHeartbeat > DateTime.UtcNow.AddSeconds(-60))
                 .CountAsync();
 
             var totalWorkers = await _dbContext.WorkerHeartbeats.CountAsync();
@@ -99,7 +99,7 @@ public class MonitoringController : ControllerBase
             var workerList = allWorkers.Select(w => new
             {
                 workerId = w.WorkerId,
-                status = w.LastHeartbeat > DateTime.UtcNow.AddMinutes(-2) ? "Active" : "Inactive",
+                status = w.LastHeartbeat > DateTime.UtcNow.AddSeconds(-60) ? "Active" : "Inactive",
                 uptimeMinutes = (DateTime.UtcNow - w.LastHeartbeat).TotalSeconds < 30 ? 999.0 : 10.0,
                 activeTasks = w.ActiveTasks,
                 tasksCompleted = 0,
@@ -131,7 +131,7 @@ public class MonitoringController : ControllerBase
             return Ok(new
             {
                 workerId = worker.WorkerId,
-                status = worker.LastHeartbeat > DateTime.UtcNow.AddMinutes(-2) ? "Active" : "Inactive",
+                status = worker.LastHeartbeat > DateTime.UtcNow.AddSeconds(-60) ? "Active" : "Inactive",
                 tasksStarted = 0,
                 tasksCompleted = 0,
                 tasksFailed = 0,
@@ -162,7 +162,7 @@ public class MonitoringController : ControllerBase
         try
         {
             var workers = await _dbContext.WorkerHeartbeats
-                .Where(w => w.LastHeartbeat > DateTime.UtcNow.AddMinutes(-2))
+                .Where(w => w.LastHeartbeat > DateTime.UtcNow.AddSeconds(-60))
                 .CountAsync();
 
             var inProgressTasks = await _dbContext.Tasks
